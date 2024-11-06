@@ -38,28 +38,33 @@ async def process_data(model:str, generator_str: str, file_path: str, batch_size
         if generator_str == 'vllm' 
         else OpenRouterGenerator(model=model))
     
-    # Load data
+    instructions = []
+    
+    # Load data & Collect instructions
     if '.json' not in file_path:
         data = load_dataset(file_path)['train']  # Assuming the main split is named 'train'
+        
+        for sample in data:
+            convo = sample['conversations']
+            if convo[0]['from'] == 'human':
+                user = convo[0]['value']
+            else:
+                user = convo[1]['value']
+            
+            instructions.append(user)            
+            
     else:
         with open(file_path, 'r') as file:
             data = json.load(file)
+            
+        for sample in data:
+            user = sample['final_instruction']
+            instructions.append(user)
             
     start_idx = 0
     
     # Calculate total number of batches
     total_batches = (len(data) + batch_size - start_idx - 1) // batch_size
-    
-    instructions = []
-    for sample in data:
-        convo = sample['conversations']
-        if convo[0]['from'] == 'human':
-            user = convo[0]['value']
-        else:
-            user = convo[1]['value']
-        
-        instructions.append(user)            
-        
         
     # Process in batches
     all_results = []
