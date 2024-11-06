@@ -1,6 +1,7 @@
 from .base_evaluator import BaseEvaluator
 from typing import List, Tuple
 import re
+import asyncio
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class FailureDetectorEvaluator(BaseEvaluator):
@@ -18,21 +19,19 @@ class FailureDetectorEvaluator(BaseEvaluator):
         )
 
     def evaluate(self, instructions: List[str], responses: List[str]) -> float:
-        with self.executor as executor:
-            failure_futures = [executor.submit(self.is_failure, response) for response in responses]
-            failures = sum(future.result() for future in as_completed(failure_futures))
+        failure_futures = [self.executor.submit(self.is_failure, response) for response in responses]
+        failures = sum(future.result() for future in as_completed(failure_futures))
         return failures / len(responses)
 
     async def select_best_method(self, methods: List[str], instructions: List[str], responses: List[List[str]]) -> Tuple[str, float]:
         evaluation_results = []
         
-        with self.executor as executor:
-            futures = [executor.submit(self.evaluate, instructions, method_responses) 
-                       for method_responses in responses]
-            
-            for method, future in zip(methods, futures):
-                failure_rate = future.result()
-                evaluation_results.append((method, failure_rate))
+        futures = [self.executor.submit(self.evaluate, instructions, method_responses) 
+                   for method_responses in responses]
+
+        for method, future in zip(methods, futures):
+            failure_rate = await asyncio.wrap_future(future)
+            evaluation_results.append((method, failure_rate))
         
         best_method, lowest_failure_rate = min(evaluation_results, key=lambda x: x[1])
         return best_method, lowest_failure_rate
